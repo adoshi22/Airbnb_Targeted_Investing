@@ -26,13 +26,14 @@ With our analysis, we have developed a business case for an investor who is inte
 
 
 **Results and Findings:**
-• Neighbourhoods which would yield high returns will be Pacific beach, Mission Beach, Ocean Beach, La Jolla and North Park.
-• An appropriate price range will be $100 - $120.
-• The property must be flexible with respect to its booking duration and be able to provide accommodation to the guests.
-• Achieving a superhost status will help in increasing the booking rates.
-• A house or an apartment will have more bookings as compared to other property types.
-• Amenities which matter the most are Free Parking, Smoke detectors, Wifi, and Laptop friendly workspace.
-• Providing more amenities will affect the booking rate.
+
+* Neighbourhoods which would yield high returns will be Pacific beach, Mission Beach, Ocean Beach, La Jolla and North Park.
+* An appropriate price range will be $100 - $120.
+* The property must be flexible with respect to its booking duration and be able to provide accommodation to the guests.
+* Achieving a superhost status will help in increasing the booking rates.
+* A house or an apartment will have more bookings as compared to other property types.
+* Amenities which matter the most are Free Parking, Smoke detectors, Wifi, and Laptop friendly workspace.
+* Providing more amenities will affect the booking rate.
 
 
 ## References:
