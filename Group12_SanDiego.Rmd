@@ -1,0 +1,895 @@
+---
+title: "Investor Report for Airbnb's in San Diego"
+author: "Group 12"
+output:
+  pdf_document:
+    latex_engine: xelatex
+  html_notebook: default
+  word_document: default
+always_allow_html: yes
+---
+
+**Project Title : Investor Report for Airbnbs in San Diego **
+
+Market Assigned to the Team : San Diego
+
+“We, the undersigned, certify that the report submitted is our own original work; all authors participated in the work in a substantive way; all authors have seen and approved the report as submitted; the text, images, illustrations and other items included in the manuscript do not carry any infringement/plagiarism issue upon any existing copyrighted materials.”
+
+
+
+
+Name of the signed team members
+
+
+|Team member 1 | Chinmay Gupta   |
+|Team member 2 | Shruti Sharma   |
+|Team member 3 | Siddhita Bagwe  |
+|Team member 4 | Mansi Kosmakar  |
+|Team member 5 | Harsh Sharma    |
+|Team member 6 | Anuj Doshi      |
+
+ 
+
+
+```{r setup, include=FALSE}
+
+# This chunk shows/hides the code in your final report. When echo = TRUE, the code
+# is shown in the report. When echo = FALSE, the code is hidden from the final report.
+# We would like to see your code, so please leave the setting as is during the course.
+# This chunk will not show up in your reports, so you can safely ignore its existence.
+
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+
+**I Executive Summary**
+
+With our analysis, we have developed a business case for an investor who is interested in acquiring homes in San Diego to put them up as AirBnB rentals.For the investor to  determine where to invest, we have provided a comprehensive study based on predictive analysis.With the help of statistical modeling, we have considered certain variables which have a strong effect on the investor’s decision. The selection of variables was based on certain factors which proved to serve the primary purpose of our project; to maximize the investor’s ROI.
+ 
+Some of the factors that were considered include the discerning of neighbourhoods which would yield high returns.One of our principal findings is that achieving a superhost status would help increase the booking rate. Identification of certain amenities which drive the customers’ selection of an Airbnb property in San Diego is a novel realisation in our analysis. 
+
+
+
+```{r}
+library("tidyverse")
+library("tidymodels")
+library("plotly")
+library("skimr")
+library("caret")
+library("lubridate")
+library("plyr")
+library("Hmisc")
+library("pheatmap")
+library('corrplot')
+library("glmnet")
+library("tidytext")
+library("topicmodels")
+library(tokenizers)
+```
+
+```{r}
+
+dfTrain <- read_csv("airbnb_SanDiego_Train.csv")
+dfTest <- read_csv("airbnb_SanDiego_Test.csv")
+```
+
+#feature-selection
+```{r}
+colsToDrop <- c("weekly_price","zipcode","{randomControl}","host_acceptance_rate","host_has_profile_pic","square_feet","latitude","longitude","require_guest_phone_verification","require_guest_profile_picture","space","state","transit","monthly_price","access","city","description","interaction","neighborhood_overview","host_about","host_location","host_neighbourhood","host_response_rate","host_response_time","host_since","host_verifications","house_rules","notes","is_location_exact","market","requires_license", "review_scores_accuracy","review_scores_checkin","review_scores_cleanliness","review_scores_communication","review_scores_location","review_scores_rating","review_scores_value","host_listings_count", "is_business_travel_ready","availability_30","availability_60","availability_90")
+
+
+dfTrain <- dfTrain %>% select(-all_of(colsToDrop))
+dfTest <- dfTest %>% select(-all_of(colsToDrop))
+
+```
+
+#Data cleaning
+
+```{r}
+dfTrain$neighbourhood <- as.character(dfTrain$neighbourhood)
+dfTest$neighbourhood <- as.character(dfTest$neighbourhood)
+
+dfTrain$amenities <- as.character(dfTrain$amenities)
+dfTest$amenities <- as.character(dfTest$amenities)
+
+dfTrain$security_deposit <- as.numeric(gsub('\\$|,', '', dfTrain$security_deposit))
+dfTest$security_deposit <- as.numeric(gsub('\\$|,', '', dfTest$security_deposit))
+
+dfTrain$cleaning_fee <- as.numeric(gsub('\\$|,', '', dfTrain$cleaning_fee))
+dfTest$cleaning_fee <- as.numeric(gsub('\\$|,', '', dfTest$cleaning_fee))
+
+dfTrain$extra_people <- as.numeric(gsub('\\$|,', '', dfTrain$extra_people))
+dfTest$extra_people <- as.numeric(gsub('\\$|,', '', dfTest$extra_people))
+
+dfTrain$price <- as.numeric(gsub('\\$|,', '', dfTrain$price))
+dfTest$price <- as.numeric(gsub('\\$|,', '', dfTest$price))
+
+```
+
+
+```{r}
+dfTrain$cleaning_fee <- ifelse(is.na(dfTrain$cleaning_fee),0,dfTrain$cleaning_fee)
+dfTest$cleaning_fee <- ifelse(is.na(dfTest$cleaning_fee),0,dfTest$cleaning_fee)
+
+dfTrain$extra_people <- ifelse(is.na(dfTrain$extra_people),0,dfTrain$extra_people)
+dfTest$extra_people <- ifelse(is.na(dfTest$extra_people),0,dfTest$extra_people)
+
+dfTrain$price <- ifelse(is.na(dfTrain$price),0,dfTrain$price)
+dfTest$price <- ifelse(is.na(dfTest$price),0,dfTest$price)
+
+dfTrain$security_deposit <- ifelse(is.na(dfTrain$security_deposit),0,dfTrain$security_deposit)
+dfTest$security_deposit <- ifelse(is.na(dfTest$security_deposit),0,dfTest$security_deposit)
+                   
+```
+
+
+```{r}
+dfTrain$bedrooms = ifelse(is.na(dfTrain$bedrooms), ave(dfTrain$bedrooms, FUN = function(x) median(x, na.rm = TRUE)), dfTrain$bedrooms)
+dfTrain$beds = ifelse(is.na(dfTrain$beds), ave(dfTrain$beds, FUN = function(x) median(x, na.rm = TRUE)), dfTrain$beds)
+dfTrain$bathrooms = ifelse(is.na(dfTrain$bathrooms), ave(dfTrain$bathrooms, FUN = function(x) median(x, na.rm = TRUE)), dfTrain$bathrooms)
+dfTrain$host_identity_verified = ifelse(is.na(dfTrain$host_identity_verified),FALSE, dfTrain$host_identity_verified)
+dfTrain$host_is_superhost = ifelse(is.na(dfTrain$host_is_superhost),FALSE, dfTrain$host_is_superhost)
+dfTrain$neighbourhood = ifelse(is.na(dfTrain$neighbourhood),"San Diego", dfTrain$neighbourhood)
+
+
+dfTest$bedrooms = ifelse(is.na(dfTest$bedrooms), ave(dfTest$bedrooms, FUN = function(x) median(x, na.rm = TRUE)), dfTest$bedrooms)
+dfTest$beds = ifelse(is.na(dfTest$beds), ave(dfTest$beds, FUN = function(x) median(x, na.rm = TRUE)), dfTest$beds)
+dfTest$bathrooms = ifelse(is.na(dfTest$bathrooms), ave(dfTest$bathrooms, FUN = function(x) median(x, na.rm = TRUE)), dfTest$bathrooms)
+dfTest$host_identity_verified = ifelse(is.na(dfTest$host_identity_verified),FALSE, dfTest$host_identity_verified)
+dfTest$host_is_superhost = ifelse(is.na(dfTest$host_is_superhost),FALSE, dfTest$host_is_superhost)
+dfTest$neighbourhood = ifelse(is.na(dfTest$neighbourhood),"San Diego", dfTest$neighbourhood)
+
+```
+
+```{r}
+colsToFactor <- c("host_is_superhost","host_identity_verified","instant_bookable","bed_type","cancellation_policy","room_type","property_type")
+
+dfTrain <-  dfTrain %>%  mutate_at(colsToFactor,~factor(.))
+dfTrain$high_booking_rate <- as.factor(dfTrain$high_booking_rate)
+
+
+dfTest <- dfTest %>% mutate_at(colsToFactor,~factor(.))
+
+```
+
+#Loading Data for part two of exploratory analysis
+
+
+```{r}
+dftr <- read.csv("SD_Train_Clean.csv")
+#dftr$neighbourhood
+#unique(dftr$neighbourhood)
+```
+
+
+
+```{r}
+
+set.seed(123)
+dffTrain<- dftr %>% sample_frac(0.7)
+dffTest<- dplyr::setdiff(dftr,dffTrain)
+
+
+```
+
+```{r}
+dft <- read.csv("SD_Test_Clean.csv")
+```
+
+#Creating dummy variables
+
+```{r}
+dffTrain$room_type_home <- ifelse(dffTrain$room_type == 'Entire home/apt' , 1 , 0)
+
+dffTrain$room_type_shared <- ifelse(dffTrain$room_type == 'Shared room' , 1 , 0)
+
+dffTrain$room_type_pvt <- ifelse(dffTrain$room_type == 'Private room' , 1 , 0)
+dffTrain$room_type_hotel <- ifelse(dffTrain$room_type == 'Hotel room' , 1 , 0)
+
+dffTest$room_type_pvt <- ifelse(dffTest$room_type == 'Private room' , 1 , 0)
+
+dffTest$room_type_home <- ifelse(dffTest$room_type == 'Entire home/apt' , 1 , 0)
+
+dffTest$room_type_shared <- ifelse(dffTest$room_type == 'Shared room' , 1 , 0)
+
+dffTest$host_is_superhostTRUE <- ifelse(dffTest$host_is_superhost == TRUE , 1 , 0)
+dffTrain$host_is_superhostTRUE <- ifelse(dffTrain$host_is_superhost == TRUE , 1 , 0)
+
+
+```
+
+```{r}
+dffTrain$cancellation_policystrict_14_with_grace_period <- ifelse(dffTrain$cancellation_policy == 'strict_14_with_grace_period' , 1 , 0)
+
+dffTrain$cancellation_policysuper_strict_60 <- ifelse(dffTrain$cancellation_policy == 'super_strict_60' , 1 , 0)
+
+dffTrain$host_identity_verifiedTRUE <- ifelse(dffTrain$host_identity_verified == TRUE , 1 , 0)
+
+
+dffTrain$cancellation_policymoderate   <- ifelse(dffTrain$cancellation_policy == 'moderate' , 1 , 0)
+
+dffTest$cancellation_policystrict_14_with_grace_period <- ifelse(dffTest$cancellation_policy == 'strict_14_with_grace_period' , 1 , 0)
+
+```
+```{r}
+dffTest$cancellation_policysuper_strict_60 <- ifelse(dffTest$cancellation_policy == 'super_strict_60' , 1 , 0)
+
+dffTest$host_identity_verifiedTRUE <- ifelse(dffTest$host_identity_verified == TRUE , 1 , 0)
+
+dffTest$cancellation_policymoderate   <- ifelse(dffTest$cancellation_policy == 'moderate' , 1 , 0)
+
+
+dffTrain$room_type_home <- ifelse(dffTrain$room_type == 'Entire home/apt' , 1 , 0)
+
+dffTrain$room_type_shared <- ifelse(dffTrain$room_type == 'Shared room' , 1 , 0)
+
+dffTrain$room_type_pvt <- ifelse(dffTrain$room_type == 'Private room' , 1 , 0)
+dffTrain$room_type_hotel <- ifelse(dffTrain$room_type == 'Hotel room' , 1 , 0)
+
+dffTest$room_type_pvt <- ifelse(dffTest$room_type == 'Private room' , 1 , 0)
+
+dffTest$room_type_home <- ifelse(dffTest$room_type == 'Entire home/apt' , 1 , 0)
+
+dffTest$room_type_shared <- ifelse(dffTest$room_type == 'Shared room' , 1 , 0)
+dffTest$room_type_hotel <- ifelse(dffTest$room_type == 'Hotel room' , 1 , 0)
+
+
+```
+
+#Understanding the data
+
+
+
+```{r}
+dfTrain$amenities <- str_remove_all(dfTrain$amenities,"[{}]")
+
+###Dissociate Words 
+word_space <- dfTrain %>% select(c(id,amenities)) %>% 
+  unnest_tokens(word, amenities,token = "regex",pattern=",")
+
+###Remove Stop Words
+data(stop_words)
+word_space <- word_space %>% 
+  anti_join(stop_words)
+
+#word_space
+```
+
+```{r}
+countr <- word_space %>%  group_by(word) %>% tally() %>% arrange(-n)
+
+wt1 <- gsub("[^[:alnum:]]", " ", countr$word) %>% as_tibble()
+
+count_freq <- cbind(wt1,countr$n)
+colnames(count_freq) <- c("word","freq")
+count_freq
+
+```
+
+
+```{r}
+count_am <- word_space %>%  group_by(id) %>% tally() %>% arrange(-n)
+colnames(count_am) <- c("id","count_amenities")
+#count_am
+```
+#varImp
+
+```{r}
+dft <- left_join(dfTrain,count_am,by="id") %>% select(-amenities)
+dft$count_amenities <- ifelse(is.na(dft$count_amenities),0,dft$count_amenities)
+
+dft$property_type <- as.character(dft$property_type)
+
+```
+
+```{r}
+lambdaValues <- 10^seq(-5, 2, length = 100)
+set.seed(123)
+
+fitRidge <- 
+  train(high_booking_rate ~ .-(id+neighbourhood+property_type), family='binomial', data=dft, method='glmnet', trControl=trainControl(method='cv', number=10), tuneGrid = expand.grid(alpha=0, lambda=lambdaValues))
+
+varImp(fitRidge)$importance %>%    # Add scale=FALSE inside VarImp if you don't want to scale
+  rownames_to_column(var = "Variable") %>%
+  mutate(Importance = scales::percent(Overall/100)) %>% 
+  arrange(desc(Overall)) %>% 
+  as_tibble()
+```
+```{r}
+lambdaValues <- 10^seq(-5, 2, length = 100)
+set.seed(123)
+
+fitLasso2 <- 
+  train(high_booking_rate ~ .-(id+neighbourhood+property_type), family='binomial', data=dft, method='glmnet', trControl=trainControl(method='cv', number=10), tuneGrid = expand.grid(alpha=1, lambda=lambdaValues))
+
+varImp(fitLasso2)$importance %>%    # Add scale=FALSE inside VarImp if you don't want to scale
+  rownames_to_column(var = "Variable") %>%
+  mutate(Importance = scales::percent(Overall/100)) %>% 
+  arrange(desc(Overall)) %>% 
+  as_tibble()
+
+```
+```{r}
+lambdaValues <- 10^seq(-5, 2, length = 100)
+set.seed(123)
+
+fitNet <- 
+  train(high_booking_rate ~ .-(id+neighbourhood+property_type), family='binomial', data=dft, method='glmnet', trControl=trainControl(method='cv', number=10), tuneGrid = expand.grid(alpha=0.5, lambda=lambdaValues))
+
+varImp(fitNet)$importance %>%    # Add scale=FALSE inside VarImp if you don't want to scale
+  rownames_to_column(var = "Variable") %>%
+  mutate(Importance = scales::percent(Overall/100)) %>% 
+  arrange(desc(Overall)) %>% 
+  as_tibble()
+
+```
+
+
+#treemap
+
+```{r}
+dfPlotTM <- 
+  dfTrain %>% select(c("neighbourhood"))%>%group_by(neighbourhood) %>% tally() %>%filter(n>=50) %>%  arrange(desc(n))
+  
+```
+
+```{r}
+library(treemap)
+ 
+# treemap
+treemap(dfPlotTM,
+            index = "neighbourhood",
+            vSize = "n",
+            type = "value",
+            vColor = "n" ,
+            title.legend="Treemap for Variable: Neighbourhood"
+            )
+```
+```{r}
+dfPlotPT <- 
+  dfTrain %>% select(c("property_type"))%>%group_by(property_type) %>% tally() %>% arrange(desc(n))
+  
+```
+
+```{r}
+dfFull <- read_csv("airbnb_SanDiego_Train.csv")
+```
+
+
+#map-1
+
+```{r}
+#devtools::install_github("dkahle/ggmap",force = TRUE)
+library("ggmap")
+```
+
+```{r}
+# this sets your google map for this session
+register_google(key = "AIzaSyCc7DdojQhaonak2e6Fo8zrSIP2xSkyNDY")
+
+# this sets your google map permanently
+register_google(key = "AIzaSyCc7DdojQhaonak2e6Fo8zrSIP2xSkyNDY", write = TRUE)
+
+has_google_key()
+google_key()
+has_google_client()
+has_google_signature()
+```
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+library(leaflet)
+```
+
+```{r}
+dfLoc <- dfFull %>% select(c("latitude","longitude","high_booking_rate"))
+```
+
+```{r}
+#dfLoc$high_booking_rate <- factor(dfLoc$high_booking_rate, TRUE)
+
+
+hbr1 <- dfLoc %>% filter(high_booking_rate==1)
+hbr0 <- dfLoc %>% filter(high_booking_rate==0)
+factpal <- colorFactor(c("Blue","Red"), dfLoc$high_booking_rate)
+
+
+leaflet(dfLoc) %>% setView(lng = -117.161087, lat = 32.715736, zoom = 12) %>%
+  addTiles() %>%
+  addPolygons(lat =32.715736 ,lng = -117.161087 , color = "#444444", weight = 1) %>%
+  addCircleMarkers(  lng = hbr0$longitude, 
+                     lat = hbr0$latitude,
+                     radius = 2, 
+                     stroke = FALSE,
+                     color = "blue",
+                     fillOpacity = 0.5
+                     )  %>%
+  addCircleMarkers(  lng = hbr1$longitude, 
+                     lat = hbr1$latitude,
+                     radius = 2, 
+                     stroke = FALSE,
+                     color = "red",
+                     fillOpacity = 0.9
+                     )  %>% 
+  
+  addLegend("bottomleft",pal=factpal ,values = ~high_booking_rate)
+```
+
+
+#box-plots
+
+```{r}
+cont <- c("bedrooms","bathrooms","beds","extra_people","guests_included","security_deposit","count_amenities","price")
+for (colname in cont){
+  plot <- ggplot(data=dft, aes(x=high_booking_rate, y=dft[[colname]])) + 
+      geom_boxplot(fill="lightblue") + labs(x = "high_booking_rate", y = colname,
+            title = paste(colname, "HBR")) +
+            theme(axis.text.x = element_text(angle = 90, hjust = 1)) + 
+            scale_y_continuous(limits = quantile(dft[[colname]], c(0.1, 0.9)))
+  print(plot)
+}
+
+```
+
+#word_cloud
+
+```{r}
+library("tm")
+library("wordcloud")
+library("factoextra")
+library("NbClust")
+
+```
+
+
+
+
+
+
+############################################### Part 2 ###############################################################
+
+*II Research Questions*
+1. Can the price alone determine the High Booking Rates?
+
+
+
+For this question, first we determined the correlation between all the important features by plotting a heatmap. After that we specifically chose price and high_booking_rate to numerically measure the correlation between them. The correlation was low and negative. To further discover the relation between these two features, we divided the data set in two categories. One with high_booking_rate value equal to 1 and one with high_booking_rate value equals 0. We plotted the scatter plot and box plot of the divided data against price. After that we concluded that prices don’t determine booking rates. Also, the properties which have higher booking rates have a median price of $120.
+
+
+```{r}
+dfTrain2 <- read.csv("SD_Train_Clean.csv")
+```
+
+## Find Correlation between the variables
+
+```{r}
+dfcorr <- dfTrain2 %>% select(high_booking_rate,price,accommodates,availability_30,availability_365,availability_60,availability_90,bathrooms,bedrooms,maximum_nights,minimum_nights,security_deposit,guests_included,beds)
+cor(dfcorr)
+```
+
+
+#Heatmap
+
+```{r}
+pheatmap(cor(dfcorr))
+```
+
+# Data with price and High Booking Rate
+```{r}
+dfbp <- dfTrain2 %>% select(high_booking_rate,price)
+```
+# Correlation between Price and High Booking Rate
+
+```{r}
+cor(dfbp)
+```
+
+
+```{r}
+dfTrain$high_booking_rate<- as.factor(dfTrain2$high_booking_rate)
+```
+
+# Dataset with only High Booking rate and Price
+
+```{r}
+dfbp1 <- dfbp[ which(dfbp$high_booking_rate==1), ]
+rownames(dfbp1) <- seq(length=nrow(dfbp1))
+
+```
+
+# Dataset with only Low booking rate and price
+```{r}
+dfbp2 <- dfbp[ which(dfbp$high_booking_rate==0), ]
+rownames(dfbp2) <- seq(length=nrow(dfbp2))
+
+```
+
+
+# Plot Data with Low Booking Rate
+
+
+```{r}
+d <- density(dfbp2$price)
+plot (d)
+```
+
+# Plot data with high Booking rate 
+
+
+```{r}
+d <- density(dfbp1$price)
+plot (d)
+```
+
+
+*2. Is the Booking Rate of a property dependent on how “Accommodative” an  AirBnb property is?*
+
+For this question first we selected only those variables that according to our domain knowledge are most closely related to the accommodation at a particular property. These variables are High_booking_rate (DV), accommodates, availability_30, availability_365, availability_60, availability_90, bathrooms, bedrooms, maximum_nights, minimum_nights, guests_included, beds.
+
+After selecting variables, we ran a logistic regression model with high_booking_rate as DV. In the summary of the regression model, we found out that accommodates,availability_30, availability_365,availability_60, availability_90, bathrooms, bedrooms, maximum_nights, minimum_nights, guests_included -  these variables are necessary for determining high_booking_rate as per their p-values. We determined the accuracy of the model using a confusion matrix. From this model, we concluded that for an Airbnb property to have higher booking rates, it must be flexible with respect to its booking duration and be able to provide accommodation to the guests.
+
+
+# Logistic Regression Model on variables related to Property
+
+```{r}
+dfm1 <- dfTrain2 %>% select(high_booking_rate,accommodates,availability_30,availability_365,availability_60,availability_90,bathrooms,bedrooms,maximum_nights,minimum_nights,guests_included,beds)
+
+dfcTrain <- dfm1 %>% sample_frac(0.65)
+dfcTest <- dplyr::setdiff(dfm1, dfcTrain)
+
+dfcTrain$high_booking_rate <- as.factor(dfcTrain$high_booking_rate)
+dfcTest$high_booking_rate <- as.factor(dfcTest$high_booking_rate)
+```
+
+
+
+```{r}
+fit_glm <- glm(formula = high_booking_rate~., family='binomial',dfcTrain)
+summary(fit_glm)
+```
+
+# Model Accuracy and COnfusion Matrix
+
+```{r}
+resultsLPM <-
+	glm(high_booking_rate~.,family='binomial',data=dfcTest) %>%
+	predict(dfcTest,type='response' ) %>%	  
+	bind_cols(dfcTest, predictedProb=.) %>% 	
+	mutate(predictedClass = as.factor(ifelse(predictedProb>0.5,1,0)))
+  
+resultsLPM %>% 
+  xtabs(~predictedClass+high_booking_rate,.) %>% 
+  confusionMatrix(positive='1')
+```
+
+
+
+
+```{r}
+resultsLPM %>% conf_mat(truth=high_booking_rate,estimate=predictedClass) %>% 
+autoplot(type='heatmap')
+```
+
+
+
+
+*3. Is High Booking Rate affected by various charges included with price?*
+
+
+
+In this question, we tried to determine whether the factors which add to the price can affect the high_booking_rate. For this we selected the variables like cleaning fee, extra people fee, price, security deposit. After selecting features, we ran a regression model with high_booking_rate as a dependent variable. From the model summary, we can see that the cleaning fee and the security deposit barely matter for high_booking_rate. Factors like price and extra people fee are the statistically important variables. Also when we determine the accuracy of the model using a confusion matrix, the accuracy was 68%. So we concluded that (i) If a property provides for extra_people despite charging for the same - its booking rate improves, (ii) Cleaning fee and security deposits do not have any impact on the higher booking rates (iii) If the price of a property is high, its booking rate decreases.
+
+
+
+# Logistic Regression Model on variables related to Price
+
+```{r}
+
+dfm2 <- dft %>% select(high_booking_rate,cleaning_fee,extra_people,price,security_deposit)
+
+dfcTrain <- dfm2 %>% sample_frac(0.70)
+dfcTest <- dplyr::setdiff(dfm2, dfcTrain)
+
+dfcTrain$high_booking_rate <- as.factor(dfcTrain$high_booking_rate)
+dfcTest$high_booking_rate <- as.factor(dfcTest$high_booking_rate)
+```
+
+
+```{r}
+fit_glm <- train(high_booking_rate~., family='binomial',dfcTrain,method = "glm")
+summary(fit_glm)
+```
+```{r}
+resultsLPM <- fit_glm %>% 
+	predict(dfcTest,type='raw') %>%	  
+	bind_cols(dfcTest, predictedClass=.)	
+	
+resultsLPM %>% 
+  xtabs(~predictedClass+high_booking_rate,.) %>% 
+  confusionMatrix(positive='1')
+```
+
+```{r}
+resultsLPM %>% conf_mat(truth=high_booking_rate,estimate=predictedClass) %>% 
+autoplot(type='heatmap')
+```
+
+
+#XGBoost
+
+*4. Does being superhost affect booking rate?*
+
+
+From our XG boost model, we saw that the host_is_superhost is a really important variable. So, we analyzed this variable further. Selected the superhost and high booking rate columns, filtered the high booking rate = 1 then, grouped by host_is_superhost and got the count of booking rate =1 for both groups (superhost = true and supehost = false). The results of this query shows that Properties with a superhost has a higher chance of having a high booking rate. 
+
+
+```{r}
+df_sd_train <- dft %>% sample_frac(.65)
+df_sd_test <- dplyr::setdiff(dft, df_sd_train)
+
+```
+
+```{r, eval=FALSE}
+
+set.seed(2020)
+
+fitXGBoost <- train(high_booking_rate ~ ., data=df_sd_train, method='xgbTree')
+
+#See the CV output (accuracy per pruning parameter etc.)
+fitXGBoost$results %>% 
+  arrange(-Accuracy)
+
+#See the variables plotted by importance (according to the bagged tree):
+plot(varImp(fitXGBoost), top=20)
+
+#See the variables listed by importance (according to the bagged tree)
+varImp(fitXGBoost)$importance %>%    # Add scale=FALSE inside VarImp if you don't want to scale
+  rownames_to_column(var = "Variable") %>%
+  mutate(Importance = scales::percent(Overall/100)) %>% 
+  arrange(desc(Overall)) %>% 
+  as_tibble()
+
+#Make predictions:
+resultsXGBoost <-
+  fitXGBoost %>% 
+  predict(df_sd_test, type='raw') %>% 
+  bind_cols(df_sd_test, predictedClass=.)
+
+resultsXGBoost %>% 
+  xtabs(~predictedClass+high_booking_rate, .) %>% 
+  confusionMatrix(positive = '1')
+
+```
+
+
+*5. Which neighbourhood results in a higher booking rate?*
+
+
+Further to determine which neighbourhoods are most likely to get high_booking_rate , we plot a map. On the map we plotted the circles whose area is basically dependent on the number of high_booking_rate properties in that area. So when we plotted we found out that the regions closer to the seafront or beaches are more likely to have a high booking rate than the regions in the middle. The reason is tourism is a major part of San Diego's economy and also the events like Comic Con, Surfing Tournaments, La Jolla Festival, happen at or near beaches. These events attract many people every year, so that's why properties near sea are most likely to have high booking rates.
+
+
+
+#Plotting map for neighbourhoods
+```{r}
+df_sd_map <- read.csv("sd_map.csv")
+
+df_sd_map$neighbourhood = ifelse(is.na(df_sd_map$neighbourhood),"Others", dfTrain$neighbourhood)
+
+sd_map <- dfFull %>%
+  select(high_booking_rate,neighbourhood, latitude, longitude) %>%
+  filter(high_booking_rate == 1) %>% filter(neighbourhood != "Others") %>% 
+  group_by(neighbourhood) %>%
+  summarise(total_high_bookings = sum(high_booking_rate),lat = mean(latitude),lng = mean(longitude) )%>%
+  
+  arrange(desc(total_high_bookings))
+  
+```
+
+
+```{r}
+m <- leaflet() %>%
+  addTiles() %>%  # Add default OpenStreetMap map tiles
+  addCircles(lat = df_sd_map$lat, lng = df_sd_map$lng, weight=1,radius=df_sd_map$total_high_bookings*5)
+m  # Print the map
+```
+
+
+
+*6. How do the provided amenities affect the booking rate of an AirBnb property?*
+
+
+To understand the importance of the amenities provided, a column with the count of amenities was introduced. After applying a Random Forest model to the variables including the amenities count, it was identified that the count of amenities was the most significant variable. To further add onto this point a density graph was plotted which depicted the amenities provided to rentals with both a high and a low booking rate. This plot was compared against a plot of amenities provided against the high booking rate. This proved that the high booking rate does not depend on the type of amenity provided in the Airbnb rental, but highly depends on the number of amenities provided. A word cloud plotted for both the amenities provided in a low booking rate rental and a high booking rate rental showed almost the same. Out of which free parking space, WiFi, smoke detectors and laptop friendly workspace and the most frequently available amenities.
+
+
+#VarImp RF
+
+```{r}
+library("randomForest")
+```
+
+```{r}
+dft1 <- dft
+dft1$property_type <- as.factor(dft1$property_type)
+```
+
+```{r}
+set.seed(123)
+
+fitRf <- 
+  randomForest(high_booking_rate ~ .-(id+ neighbourhood), family="binomial", data = dft1 )
+
+print(fitRf)
+```
+
+
+```{r}
+varImp(fitRf) %>%    # Add scale=FALSE inside VarImp if you don't want to scale
+  rownames_to_column(var = "Variable") %>%
+  #mutate(Importance = scales::percent(Overall/100)) %>% 
+  arrange(desc(Overall)) %>% 
+  as_tibble()
+
+```
+
+```{r}
+varImpPlot(fitRf, sort=TRUE)
+```
+
+
+```{r}
+#library(ggplot2)
+theme_set(theme_classic())
+
+# Plot
+g <- ggplot(dft, aes(x=count_amenities))+geom_bar() + labs(title="Distribuition of no. of amenities", x="Amenities Count", y="No. of Properties")
+g
+```
+
+#amenities-density-comparision
+```{r}
+ p <- ggplot(dft, aes(x=x) ) +
+  # Top
+  geom_density( aes(x = count_amenities, y = ..density..), fill="#69b3a2",data = dft %>% filter(high_booking_rate==1) ) +
+  geom_label( aes(x=10, y=0.25, label="high_booking_rate=1"), color="#69b3a2") +
+  # Bottom
+  geom_density( aes(x = count_amenities, y = -..density..), fill= "#404080",data = dft %>% filter(high_booking_rate==0)) +
+  geom_label( aes(x=10, y=-0.25, label="high_booking_rate=0"), color="#404080")  +
+  xlab("value of x")
+p
+
+```
+
+
+```{r}
+dft3 <- dfTrain %>% filter(high_booking_rate==1)
+
+docs <- Corpus(VectorSource(dft3$amenities))# %>%  unnest_tokens(word, amenities,token = "regex",pattern=",")))
+
+toSpace <- content_transformer(function (x , pattern ) gsub(pattern, " ", x))  #unnest_tokens(word, amenities,token = "regex",pattern=",")
+docs <- tm_map(docs, toSpace, "[^[:alnum:]]")
+
+
+# Convert the text to lower case
+docs <- tm_map(docs, content_transformer(tolower))
+# Remove english common stopwords
+docs <- tm_map(docs, removeWords, stopwords("english"))
+docs <- tm_map(docs, removeWords, c("essentials","free","carbon","monoxide","smoke","street","premises")) 
+
+dtm <- TermDocumentMatrix(docs)
+m <- as.matrix(dtm)
+v <- sort(rowSums(m),decreasing=TRUE)
+d <- data.frame(word = names(v),freq=v)
+
+
+set.seed(123)
+wordcloud(words = d$word, freq = d$freq,scale=c(4,.1), min.freq = 1000,
+          random.order=FALSE, 
+          colors=brewer.pal(8, "Greens"))
+
+```
+
+
+```{r}
+dft4 <- dfTrain %>% filter(high_booking_rate==0)
+
+docs <- Corpus(VectorSource(dft4$amenities))
+
+toSpace <- content_transformer(function (x , pattern ) gsub(pattern, " ", x))  
+docs <- tm_map(docs, toSpace, "[^[:alnum:]]")
+
+
+# Convert the text to lower case
+docs <- tm_map(docs, content_transformer(tolower))
+# Remove english common stopwords
+docs <- tm_map(docs, removeWords, stopwords("english"))
+docs <- tm_map(docs, removeWords, c("essentials","free","carbon","monoxide","smoke","street","premises")) 
+
+dtm <- TermDocumentMatrix(docs)
+m <- as.matrix(dtm)
+v <- sort(rowSums(m),decreasing=TRUE)
+d <- data.frame(word = names(v),freq=v)
+
+set.seed(123)
+wordcloud(words = d$word, freq = d$freq,scale=c(4,.1), min.freq = 1000,
+          random.order=FALSE, 
+          colors=brewer.pal(8, "Reds"))
+
+
+```
+
+
+*III Methodology*
+
+1. Determined the correlation between all the important features. 
+Chose price and high_booking_rate to numerically measure the correlation between them. 
+To further discover the relation between these two features, we plotted the scatter plot and box plot of the divided data against price. Concluded that prices don’t determine booking rates. Also, the properties which have higher booking rates have a median price of $120.
+
+2. Selected only those variables that are most closely related to the accommodation at a particular property. 
+Ran logistic regression model with high_booking_rate as DV. 
+We determined the accuracy of the model using a confusion matrix. 
+Concluded that for an Airbnb property to have higher booking rates, it must be flexible with respect to its booking duration and be able to provide accommodation to the guests.
+
+3. Determined whether the factors which add to the price. 
+Ran a regression model with high_booking_rate as a dependent variable. 
+Determined the accuracy of the model using a confusion matrix
+Concluded that (i) If a property provides for extra_people despite charging for the same - its booking rate improves, (ii) Cleaning fee and security deposits do not have any impact on the higher booking rates (iii) If the price of a property is high, its booking rate decreases.
+
+4. From our XG boost model, we concluded that the host_is_superhost is a really important variable. So, we analyzed this variable further. Selected the superhost and high booking rate columns, filtered the high booking rate = 1 then, grouped by host_is_superhost and got the count of booking rate =1 for both groups (superhost = true and supehost = false). The results of this query shows that Properties with a superhost has a higher chance of having a high booking rate. 
+
+5. To determine which neighbourhoods are most likely to get high_booking_rate, we plot a map. On the map we plotted the circles whose area is basically dependent on the number of high_booking_rate properties in that area. We concluded that the regions closer to the seafront or beaches are more likely to have a high booking rate than the regions in the middle. 
+
+6. To understand the importance of the amenities provided, a column with the count of amenities was introduced. After applying a Random Forest model to the variables including the amenities count, we identified that the count of amenities was the most significant variable. To further add onto this point a density graph was plotted which depicted the amenities provided to rentals with both a high and a low booking rate. This plot was compared against a plot of amenities provided against the high booking rate. This proved that the high booking rate does not depend on the type of amenity provided in the Airbnb rental, but highly depends on the number of amenities provided. A word cloud plotted for both the amenities provided in a low booking rate rental and a high booking rate rental showed almost the same. Out of which free parking space, WiFi, smoke detectors and laptop friendly workspace and the most frequently available amenities.
+
+
+*IV Results and findings*
+
+
+*    Neighbourhoods which would yield high returns will be Pacific beach, Mission Beach, Ocean Beach, La Jolla and North Park.
+*    An appropriate price range will be $100 - $120.
+*    The property must be flexible with respect to its booking duration and be able to provide accommodation to the guests.
+*    Achieving a superhost status will help in increasing the booking rates.
+*    A house or an apartment will have more bookings as compared to other property types.
+*    Amenities which matter the most are Free Parking, Smoke detectors, Wifi, and Laptop friendly workspace.
+*    Providing more amenities will affect the booking rate.
+
+
+*V Conclusion*
+
+The data analysis for this project was done keeping in mind the various factors that would largely affect the customer booking rates based on domain knowledge and the various models built for variable selection. The logistic models applied to variables of choice to explain different business cases helped identify the importance of each variable for that particular case. For instance the relation of price and high booking rate in customers showed that prices do not primarily or directly affect the decision making while booking a rental spot around San Diego. Where as the accommodative comfort provided to the customers in terms of the in house services provided largely sways their decision to book. The superhost program launched by Airbnb has proved to be very helpful to both the property owners and the customers alike. The superhost standing is achieved by an owner when he has more reservations for his properties, maintains a response rate and low cancellation rate and attains an overall high rating from his customers. Thus being a superhost propels more customers to book rentals from the owner owing to his status and the ability to provide extraordinary hospitality to his customers. 
+ 
+San Diego being the city on the Pacific coast of California is majorly known for its beaches, parks and warm climate. Thus, when an investor looks at prospective spaces for renting out in the area, locations with beach view, minimum commute distance to the beach, broad walks and local markets are a primary choice. From the research that we conducted as a team, it was reflected that this location provides abundant potential for prospective plot buyers in terms of the wide range of property types it has. 	Out of all the available property types, the house and apartment is found to be the most rented. This is due to the fact that San Diego has a small but well established IT hub, which has individuals from different backgrounds visiting the city on various occasions. 
+
+As for Airbnb rental property owners who are looking to improve their existing customer base, there were multiple factors that were established to be important. As this data analysis was done after reviewing the data from the customer- working on this will be of help to the property owners as the majority of customers reviewed in favor of particular factors. These factors included the amenities provided, the price range and allowing the customers to book their rentals well in advance. As these results were derived after working on the data provided by a large mass of customers of the website, this analysis definitely benefits the customers equally as it tends to their requests based renting habits of the majority of the customer population.
+	
+	
+
+*VI References* 
+
+1.    San Diego Official Tourism website. https://www.sandiego.org/explore/events.aspx
+2.    Leaflet for R. https://rstudio.github.io/leaflet/
+3.    Plots in R. https://www.statmethods.net/graphs/boxplot.html
+4.    Airbnb Superhost. https://www.airbnb.com/how-do-i-become-a-superhost
+5.    A Gentle Introduction to XGBoost for Applied Machine Learning. https://machinelearningmastery.com
+
+
+
+
+
+*VII Appendix*
+
+The analysis conducted over the San Diego data for the Airbnb rental markets was done by applying various data cleaning techniques to the data. Initially, missing values were filled in using appropriate techniques needed of each of the business cases tackled in that particular section. For better comprehension of the data, various visualizations were rendered. A map that plotted the locations with high booking rates on the San Diego map, a tree map showing various popular neighbourhoods and a map showing popular property types in the area all helped in understanding the data better. 
+  
+The logistic regression models are appropriate to be used when the dependent variable is of dichotomous nature. Since, the majority of the business cases in this report consists of identifying the factors affecting the dependent variables, logistic regression method was employed. Another model used was XG Boost, which helped to identify the important variables that affect the business case. Here, the library is laser focused on computational speed and model performance. XGBoost method dominates structured or tabular datasets on classification and regression predictive modeling problems.
+
+Furthermore, a Random Forest model was run, to again identify the important variable, but this time including a new column containing the count of amenities provided in the Airbnb rentals. This new variable, according to the Random Forest method proves to be most significant when a customer books a property. A density graph and the distribution of the amenities used help understand that the number of amenities provided by the owner trumps the types of amenities provided when renting an Airbnb. To add to this point a word cloud of the amenities provided in the homes with a high booking rate and the ones with a low booking rate was plotted. It showed similar amenities highlighted in both the word clouds. Thus, the number of amenities provided in an Airbnb rental is of utmost importance to the customers while booking.
