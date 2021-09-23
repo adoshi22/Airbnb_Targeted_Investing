@@ -36,8 +36,8 @@ With our analysis, we have developed a business case for an investor who is inte
 
 
 ## References:
-[San Diego Official Tourism website.](https://www.sandiego.org/explore/events.aspx)
-[Leaflet for R.](https://rstudio.github.io/leaflet/)
-[Plots in R.](https://www.statmethods.net/graphs/boxplot.html)
-[Airbnb Superhost.](https://www.airbnb.com/how-do-i-become-a-superhost)
-[A Gentle Introduction to XGBoost for Applied Machine Learning.](https://machinelearningmastery.com)
+* [San Diego Official Tourism website.](https://www.sandiego.org/explore/events.aspx)
+* [Leaflet for R.](https://rstudio.github.io/leaflet/)
+* [Plots in R.](https://www.statmethods.net/graphs/boxplot.html)
+* [Airbnb Superhost.](https://www.airbnb.com/how-do-i-become-a-superhost)
+* [A Gentle Introduction to XGBoost for Applied Machine Learning.](https://machinelearningmastery.com)
